@@ -16,8 +16,8 @@ def get_provider(directory, host_segment, domain_segment, appliances, domain, st
     rows = []
     print(directory)
     for filename in glob(_glob):
-        host = filename.split(os.path.sep)[host_segment]
-        _domain = filename.split(os.path.sep)[domain_segment]
+        host = filename.split(os.path.sep)[int(host_segment)]
+        _domain = filename.split(os.path.sep)[int(domain_segment)]
         meta = {"host": host, "domain": _domain}
         with open(filename, "r") as fp:
             _rows = (etree.fromstring(line) for line in fp)

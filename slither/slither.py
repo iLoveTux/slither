@@ -47,7 +47,7 @@ from lxml import etree
 from functools import partial
 from pprint import pprint
 from collections import defaultdict
-from .broker import Broker
+from slither.broker import Broker
 from croniter import croniter
 from sched import scheduler
 from datetime import datetime
