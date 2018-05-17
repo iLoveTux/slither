@@ -27,6 +27,7 @@ Tasks, by default are run in a concurrent.futures.ThreadPoolExecutor
 or a concurrent.futures.ProcessPoolExecutor depending on the
 parameters with which the Dispatcher was created.
 """
+import io
 import re
 import logging
 from inspect import (
@@ -41,6 +42,7 @@ from collections import (
 )
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
+import flask
 
 log = logging.getLogger(__name__)
 signature_result = namedtuple("SignatureResult", "args varargs varkw defaults kwonlyargs kwonlydefaults annotations")
@@ -56,6 +58,12 @@ class Topic(object):
     def __init__(self, name: str):
         self.name = name
         self.subtopics = self.split_name()
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
 
     def split_name(self):
         names = []
@@ -123,12 +131,12 @@ class Broker(object):
         self.publishers = list()
         self.topics = list()
 
-
     def pub(self, topic: Topic, message: str):
          """publish a message to a topic. Topic should be a str
          while args and kwargs are treated as the payload.
          """
          _message = str(message)
+         logging.getLogger(topic).info(_message)
          if not isinstance(topic, Topic):
              topic = Topic(topic)
          for _topic in topic.split_name():
@@ -171,3 +179,18 @@ class Broker(object):
         )
         self.subscriptions[topic].append(sub)
         return sub
+
+pubsub_app = flask.Flask(__name__)
+pubsub_app.broker = Broker()
+
+@pubsub_app.route("/pub/<topic>", methods=["POST"])
+def pub(topic):
+    pubsub_app.broker.pub(topic, flask.request.data.decode())
+    return "Thank you"
+
+@pubsub_app.route("/sub/<topic>", methods=["POST"])
+def sub(topic):
+    handler = flask.request.args.get("handler")
+    handler = _import(handler.split(":"))
+    pubsub_app.broker.sub(topic, handler)
+    return "Thank you"

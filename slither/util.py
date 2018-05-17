@@ -1,78 +1,58 @@
-"""A collection of useful utility functions to use with
-slitherd.automon.
-
-pidperf: Get performance information about the specified pid
-run: Run a command in a shell with control over stdin, stdout
-and stderr.
-run_and_monitor: Run a command in a shell with control over stdin, stdout
-and stderr and monitor the thread or process.
-"""
-import time
-import os
+import cherrypy
 import logging
-import psutil
-from collections import namedtuple
-from DataPower import DataPower
 
-__all__ = [
-    "pidperf"
-]
-
-
-READINGS = [
-    "name",
-    "cpu_times",
-    "cpu_percent",
-    "create_time",
-    "ppid",
-    "status",
-    "memory_info",
-    "num_threads",
-    "num_handles",
-    "num_ctx_switches"
-]
-
-perf_reading = namedtuple(
-    "perf_reading",
-    READINGS,
-)
-def pidperf(pid: int=os.getpid()):
-    proc = psutil.Process(pid)
-    reading = proc.as_dict(
-        attrs=READINGS,
-        ad_value=None,
+def _import(module, func):
+    """Perform the equivalent of from $module import $func
+    """
+    module = __import__(
+        module, globals(), locals(), [func], 0
     )
-    print(reading)
-    return reading
+    return getattr(module, func)
 
-def hello():
-    print("hello, world @ {}!".format(time.time()))
+def wsgi(
+        apps,
+        cert: str="./cert.pem",
+        key: str="./key.pem",
+        cachain: str=None,
+        host: str="127.0.0.1",
+        port: int=8443,
+        threadpool: int=30
+    ):
+    if not isinstance(threadpool, int):
+        threadpool = int(threadpool)
+    log = logging.getLogger("slither.util.wsgi")
+    # Mount the application
+    if isinstance(apps, str):
+        apps = apps.split()
 
-def follow(filename, delay: float=0.1):
-    with open(filename, "r") as fp:
-        while True:
-            line = fp.readline()
-            if not line:
-                time.sleep(0.1)
-                continue
-            yield line
+    for app in apps:
+        if isinstance(app, str):
+            log.debug("Found {}".format(app))
+            app = _import(*app.split(":"))
 
-def get_status(sleep_delay=10):
-    while True:
-        try:
-            dp = DataPower(
-                hostname="127.0.0.1",
-                username="admin",
-                password="admin",
-                xml_mgmt_port=15550,
-                verify=False,
-            )
-            print(
-                dp.soma.get_status(
-                    "CPUUsage"
-                ).text
-            )
-        except:
-            logging.getLogger("slither.exception").exception("An unhandled exception occurred")
-            raise
-        time.sleep(sleep_delay)
+        cherrypy.tree.graft(app, "/{}".format(app.name))
+
+    # Unsubscribe the default server
+    cherrypy.server.unsubscribe()
+
+    # Instantiate a new server object
+    server = cherrypy._cpserver.Server()
+
+    # Configure the server object
+    server.socket_host = host
+    server.socket_port = port
+    server.thread_pool = threadpool
+
+    # For SSL Support
+    # server.ssl_module            = 'pyopenssl'
+    server.ssl_certificate       = cert
+    server.ssl_private_key       = key
+    if cachain is not None:
+        server.ssl_certificate_chain = cachain
+
+    # Subscribe this server
+    server.subscribe()
+
+    log.warn("Listening on {}:{}".format(host, port))
+    cherrypy.engine.start()
+    cherrypy.engine.block()

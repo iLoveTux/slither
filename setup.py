@@ -24,9 +24,9 @@ setup(
             "slither=slither:main",
         ],
         "slither.plugin": [
-            "tictok=slither:tick_tock",
-            "files=slither:watch_directory",
-            "automan=slither:automan",
+            "tictok=slither.plugins:tick_tock",
+            "files=slither.plugins:watch_directory",
+            "automan=slither.plugins:automan",
             # "syslog=slither:syslog_server",
         ]
     },
