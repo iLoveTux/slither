@@ -185,11 +185,13 @@ pubsub_app.broker = Broker()
 
 @pubsub_app.route("/pub/<topic>", methods=["POST"])
 def pub(topic):
-    pubsub_app.broker.pub(topic, flask.request.data.decode())
-    return "Thank you"
+    message = flask.request.data.decode()
+    pubsub_app.broker.pub(topic, message)
+    return message
 
 @pubsub_app.route("/sub/<topic>", methods=["POST"])
 def sub(topic):
+    # TODO: Add in filters triggers
     handler = flask.request.args.get("handler")
     handler = _import(handler.split(":"))
     pubsub_app.broker.sub(topic, handler)

@@ -1,5 +1,27 @@
+import ssl
 import cherrypy
 import logging
+import requests
+import logging.handlers
+
+requests.packages.urllib3.disable_warnings(
+    requests.packages.urllib3.exceptions.InsecureRequestWarning
+)
+
+context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+context.verify_mode = ssl.CERT_NONE
+context.check_hostname = False
+context.load_default_certs()
+
+class BodyPostHTTPLoggingHandler(logging.StreamHandler):
+    def __init__(self, url, verify=True, *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
+        self.verify = verify
+        self.url = url
+
+    def emit(self, message):
+        msg = self.format(message)
+        requests.post(self.url, data=msg, verify=self.verify)
 
 def _import(module, func):
     """Perform the equivalent of from $module import $func
