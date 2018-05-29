@@ -22,7 +22,7 @@ THREADPOOL = {
 SCHEDULER = scheduler(time.time, time.sleep)
 
 def handle_config(path, broker, kwargs):
-    log = logging.getLogger("slither.automan.handler_config")
+    log = logging.getLogger("slither.automan.handle_config")
     kwargs = vars(kwargs)
     tree = etree.parse(path)
     for node in tree.xpath(".//Task"):
@@ -51,7 +51,7 @@ def handle_config(path, broker, kwargs):
             schedule = node.attrib.pop("_schedule")
             if schedule == "daemon":
                 # daemon
-                # Addd option to restart if necessary
+                # Add option to restart if necessary
                 if name not in THREADPOOL["daemons"]:
                     t = threading.Thread(target=func, kwargs=node.attrib)
                     t.daemon=True

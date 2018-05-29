@@ -45,6 +45,7 @@ from slither.broker import (
     Broker,
     pubsub_app,
 )
+__version__ = "0.1.0"
 
 class Resource(dict):
     """A class representing a resource which can be any type of data.
@@ -59,7 +60,10 @@ def parse_args(argv):
     """Create a argparse.ArgumentParser instance and use
     it to parse argv.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="slither version '{}'".format(__version__),
+    )
     parser.add_argument(
         "path",
         default=".",
