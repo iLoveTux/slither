@@ -1,4 +1,6 @@
+import sys
 import ssl
+import atexit
 import logging
 import socketserver
 
@@ -18,6 +20,11 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         else:
             return socketserver.TCPServer.get_request(self)
 
+    def server_close(self):
+        self.socket.close()
+        self.shutdown()
+        return SocketServer.TCPServer.server_close(self)
+
 def syslog_server(host, port, poll_interval=0.5, loggername="slither.syslog", certfile=None, keyfile=None):
     port = int(port)
     poll_interval = float(poll_interval)
@@ -26,17 +33,22 @@ def syslog_server(host, port, poll_interval=0.5, loggername="slither.syslog", ce
     class ThreadedTCPRequestHandler(socketserver.StreamRequestHandler):
 
         def handle(self):
-            self.data = self.rfile.readline().strip()
             log = logging.getLogger(
                 "{}.{}".format(
                     loggername,
                     self.client_address[0].encode().decode()
                 )
             )
-            log.info(self.data.decode())
+            for line in self.rfile:
+                log.info(line.strip().decode())
+
+        def finish(self):
+            self.request.close()
 
     server = ThreadedTCPServer((host, port), ThreadedTCPRequestHandler)
+    server.daemon_threads = True
     if certfile and keyfile:
         server.certfile = certfile
         server.keyfile = keyfile
     server.serve_forever(poll_interval=poll_interval)
+    server.shutdown()
