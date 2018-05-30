@@ -1,7 +1,9 @@
 import sys
 import ssl
+import json
 import atexit
 import logging
+import click
 import socketserver
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
@@ -52,3 +54,19 @@ def syslog_server(host, port, poll_interval=0.5, loggername="slither.syslog", ce
         server.keyfile = keyfile
     server.serve_forever(poll_interval=poll_interval)
     server.shutdown()
+
+@click.command()
+@click.option("--host", "-H", default="127.0.0.1", type=str)
+@click.option("--port", "-p", default=8014, type=int)
+@click.option("--poll-interval", "-i", default=0.5, type=float)
+@click.option("--loggername", "-n", default="{}.syslog".format(__name__))
+@click.option("--cert", "-c", default=None, type=str)
+@click.option("--key", "-k", default=None, type=str)
+@click.option("--logging-config", "-l", default=None, type=str)
+def main(host, port, poll_interval, loggername, cert, key, logging_config):
+    if logging_config:
+        with open(logging_config, "r") as fin:
+            logging.config.dictConfig(json.load(fin))
+    else:
+        logging.basicConfig(stream=sys.stdout, level=20)
+    syslog_server(host, port, poll_interval, loggername, cert, key)

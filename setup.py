@@ -20,7 +20,7 @@ setup(
     install_requires=["croniter"],
     entry_points={
         "console_scripts": [
-            "slitherd=slither:slitherd",
+            "sl-syslog=slither.plugins.syslog_server:main",
             "slither=slither:main",
         ],
         "slither.plugin": [
