@@ -21,6 +21,7 @@ setup(
     entry_points={
         "console_scripts": [
             "sl-syslog=slither.plugins.syslog_server:main",
+            "slyce=slither.slyce:main",
             "slither=slither:main",
         ],
         "slither.plugin": [
