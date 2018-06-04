@@ -22,6 +22,7 @@ setup(
         "console_scripts": [
             "sl-syslog=slither.plugins.syslog_server:main",
             "slyce=slither.slyce:main",
+            "ginsu=slither.ginsu:cli",
             "slither=slither:main",
         ],
         "slither.plugin": [
@@ -29,7 +30,11 @@ setup(
             "files=slither.plugins:watch_directory",
             "automan=slither.plugins:automan",
             # "syslog=slither:syslog_server",
-        ]
+        ],
+        "ginsu.plugin": [
+            "python=slither.ginsu:python_plugin",
+            # "syslog=slither:syslog_server",
+        ],
     },
     test_suite="nose.collector",
     tests_require=tests_require,

@@ -1,3 +1,4 @@
+import re
 import ssl
 import cherrypy
 import logging
@@ -12,6 +13,35 @@ context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
 context.verify_mode = ssl.CERT_NONE
 context.check_hostname = False
 context.load_default_certs()
+
+def encode(s):
+    return s.encode()
+
+def decode(s):
+    return s.decode()
+
+def match_regex(string, pattern, flags=0):
+    return re.match(pattern, string, flags)
+
+def search_regex(string, pattern, flags=0):
+    return re.search(pattern, string, flags)
+
+def get_xpath(node, path="."):
+    if isinstance(path, list):
+        # Only use the first one provided ignore any extra
+        path = path[0]
+    return node.xpath(path)
+
+def getitem(obj, index):
+    index = int(index)
+    return obj[index]
+
+def _getattr(obj, attr):
+    return getattr(obj, attr)
+
+def average(x, y):
+    x, y = float(x), float(y)
+    return (x+y)/2
 
 class BodyPostHTTPLoggingHandler(logging.StreamHandler):
     def __init__(self, url, verify=True, *args, **kwargs):
