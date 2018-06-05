@@ -1,8 +1,14 @@
+import os
+import re
 import pkg_resources
+from collections import defaultdict
 from urllib.parse import urlparse, parse_qsl
 from functools import partial, reduce
+import atexit
+from textwrap import dedent
 import sys
 import logging
+from lxml import etree
 from pathlib import Path
 from glob import glob
 import click
@@ -26,6 +32,10 @@ def python_plugin(obj):
         args = []
     ret = partial(func, *args, **kwargs)
     return ret
+
+def lambda_plugin(obj):
+    expression = obj.netloc
+    return lambda x: eval(expression)
 
 def _map_handle_file(path, maps):
     for line in path:
@@ -169,3 +179,64 @@ def _reduce(src, reducer):
                 log.info(str(reduce_handle_file(path, reducer)))
             elif path.is_dir():
                 raise ValueError("Only filenames and glob patterns are allowed, not directories.")
+
+pattern_action = re.compile(r"(.*?)\{(.+?)^\}", re.UNICODE|re.DOTALL|re.MULTILINE)
+def parse_script(script):
+    ret = defaultdict(list)
+    if os.path.isfile(script):
+        with open(script, "r") as fin:
+            script = fin.read()
+    script = dedent(script)
+    for test, action in pattern_action.findall(script):
+        if not test:
+            test = "True"
+        ret[test.strip()].append(dedent(action))
+    return ret
+
+@cli.command("do")
+@click.argument("script", type=str, default='True{print(LINE)}')
+@click.argument("src", nargs=-1, type=click.Path())
+def do(script, src):
+    actions = parse_script(script)
+    if "BEGIN" in actions:
+        for action in actions.pop("BEGIN"):
+            exec(dedent(action), globals(), locals())
+    if "END" in actions:
+        for action in actions.pop("END"):
+            atexit.register(exec, dedent(action), globals(), locals())
+    if "BEGINLINE" in actions:
+        begin_line = actions.pop("BEGINLINE")
+    else:
+        begin_line = []
+    if "ENDLINE" in actions:
+        end_line = actions.pop("ENDLINE")
+    else:
+        end_line = []
+    for item in src:
+        if item == "-":
+            for LINE in sys.stdin:
+                for test in actions:
+                    if begin_line:
+                        for action in begin_line:
+                            exec(action, globals(), locals())
+                    if eval(test, globals(), locals()):
+                        for action in actions[test]:
+                            exec(action, globals(), locals())
+                    if end_line:
+                        for action in end_line:
+                            exec(action, globals(), locals())
+        else:
+            for filename in glob(item):
+                with open(filename, "r") as fin:
+                    for LINE in fin:
+                        if begin_line:
+                            for action in begin_line:
+                                exec(action, globals(), locals())
+                        for test in actions:
+                            if eval(test, globals(), locals()):
+                                for action in actions[test]:
+                                    exec(action, globals(), locals())
+                        if end_line:
+                            for action in end_line:
+                                print(action)
+                                exec(action, globals(), locals())

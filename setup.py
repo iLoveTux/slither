@@ -33,6 +33,7 @@ setup(
         ],
         "ginsu.plugin": [
             "python=slither.ginsu:python_plugin",
+            "lambda=slither.ginsu:lambda_plugin",
             # "syslog=slither:syslog_server",
         ],
     },
