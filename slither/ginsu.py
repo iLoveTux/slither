@@ -1,6 +1,11 @@
+import sys
+sys.stdout.write("here")
+sys.stdout.flush()
 import os
 import re
 import pkg_resources
+from multiprocessing import Manager, Pool
+from concurrent.futures import ProcessPoolExecutor
 from collections import defaultdict
 from urllib.parse import urlparse, parse_qsl
 from functools import partial, reduce
@@ -94,7 +99,7 @@ def _import(module, func):
     """Perform the equivalent of from $module import $func
     """
     module = __import__(
-        module, globals(), locals(), [func], 0
+        module, [func], 0
     )
     return getattr(module, func)
 
@@ -180,7 +185,7 @@ def _reduce(src, reducer):
             elif path.is_dir():
                 raise ValueError("Only filenames and glob patterns are allowed, not directories.")
 
-pattern_action = re.compile(r"(.*?)\{(.+?)^\}", re.UNICODE|re.DOTALL|re.MULTILINE)
+pattern_action = re.compile(r"(.*?)\{(.+?)\s\}", re.UNICODE|re.DOTALL|re.MULTILINE)
 def parse_script(script):
     ret = defaultdict(list)
     if os.path.isfile(script):
@@ -193,17 +198,21 @@ def parse_script(script):
         ret[test.strip()].append(dedent(action))
     return ret
 
+
 @cli.command("do")
-@click.argument("script", type=str, default='True{print(LINE)}')
-@click.argument("src", nargs=-1, type=click.Path())
-def do(script, src):
+@click.argument("script", type=str, default='True{print(LINE)}', required=False)
+@click.argument("files", nargs=-1, type=click.Path())
+def do(script, files):
+    if not files:
+        files = ["-"]
     actions = parse_script(script)
     if "BEGIN" in actions:
         for action in actions.pop("BEGIN"):
-            exec(dedent(action), globals(), locals())
+            exec(dedent(action), locals())
+    end_actions = []
     if "END" in actions:
         for action in actions.pop("END"):
-            atexit.register(exec, dedent(action), globals(), locals())
+            end_actions.append(dedent(action))
     if "BEGINLINE" in actions:
         begin_line = actions.pop("BEGINLINE")
     else:
@@ -212,31 +221,32 @@ def do(script, src):
         end_line = actions.pop("ENDLINE")
     else:
         end_line = []
-    for item in src:
+    for item in files:
         if item == "-":
-            for LINE in sys.stdin:
+            for LINE in (line.strip() for line in sys.stdin):
                 for test in actions:
                     if begin_line:
                         for action in begin_line:
-                            exec(action, globals(), locals())
-                    if eval(test, globals(), locals()):
+                            exec(action, locals())
+                    if eval(test, locals()):
                         for action in actions[test]:
-                            exec(action, globals(), locals())
+                            exec(action, locals())
                     if end_line:
                         for action in end_line:
-                            exec(action, globals(), locals())
+                            exec(action, locals())
         else:
             for filename in glob(item):
                 with open(filename, "r") as fin:
-                    for LINE in fin:
-                        if begin_line:
-                            for action in begin_line:
-                                exec(action, globals(), locals())
+                    for LINE in (line.strip() for line in fin):
                         for test in actions:
-                            if eval(test, globals(), locals()):
+                            if begin_line:
+                                for action in begin_line:
+                                    exec(action, locals())
+                            if eval(test, locals()):
                                 for action in actions[test]:
-                                    exec(action, globals(), locals())
-                        if end_line:
-                            for action in end_line:
-                                print(action)
-                                exec(action, globals(), locals())
+                                    exec(action, locals())
+                            if end_line:
+                                for action in end_line:
+                                    exec(action, locals())
+    for action in end_actions:
+        exec(action, locals())
