@@ -1,6 +1,4 @@
-import sys
-sys.stdout.write("here")
-sys.stdout.flush()
+from time import time
 import os
 import re
 import pkg_resources
@@ -199,10 +197,16 @@ def parse_script(script):
     return ret
 
 
-@cli.command("do")
-@click.argument("script", type=str, default='True{print(LINE)}', required=False)
-@click.argument("files", nargs=-1, type=click.Path())
-def do(script, files):
+@cli.command("aina")
+@click.option("--field-seperator", "-F", default=r"\s+")
+@click.argument("script")
+@click.argument("files", nargs=-1)
+def aina(field_seperator, script, files):
+    """ana's not awk. A Python based alternative to awk which
+    provides an ad-hoc command-line based ETL system for modern
+    workloads.
+    """
+    field_seperator = re.compile(field_seperator)
     if not files:
         files = ["-"]
     actions = parse_script(script)
@@ -222,31 +226,26 @@ def do(script, files):
     else:
         end_line = []
     for item in files:
-        if item == "-":
-            for LINE in (line.strip() for line in sys.stdin):
-                for test in actions:
-                    if begin_line:
-                        for action in begin_line:
-                            exec(action, locals())
-                    if eval(test, locals()):
-                        for action in actions[test]:
-                            exec(action, locals())
-                    if end_line:
-                        for action in end_line:
-                            exec(action, locals())
+        if item == '-':
+            item = ["-"]
         else:
-            for filename in glob(item):
-                with open(filename, "r") as fin:
-                    for LINE in (line.strip() for line in fin):
-                        for test in actions:
-                            if begin_line:
-                                for action in begin_line:
-                                    exec(action, locals())
-                            if eval(test, locals()):
-                                for action in actions[test]:
-                                    exec(action, locals())
-                            if end_line:
-                                for action in end_line:
-                                    exec(action, locals())
+            item = glob(item)
+        for filename in item:
+            FNR = 0
+            with click.open_file(filename, "r") as fin:
+                NR = 0
+                for LINE in (line.strip() for line in fin):
+                    FNR, NR = FNR + 1, NR + 1
+                    FIELDS = field_seperator.split(LINE)
+                    for test in actions:
+                        if begin_line:
+                            for action in begin_line:
+                                exec(action, locals())
+                        if eval(test, locals()):
+                            for action in actions[test]:
+                                exec(action, locals())
+                        if end_line:
+                            for action in end_line:
+                                exec(action, locals())
     for action in end_actions:
         exec(action, locals())
