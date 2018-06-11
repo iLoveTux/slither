@@ -202,7 +202,7 @@ def parse_script(script):
 @click.argument("script")
 @click.argument("files", nargs=-1)
 def aina(field_seperator, script, files):
-    """ana's not awk. A Python based alternative to awk which
+    """aina is not awk. A Python based alternative to awk which
     provides an ad-hoc command-line based ETL system for modern
     workloads.
     """
@@ -249,3 +249,7 @@ def aina(field_seperator, script, files):
                                 exec(action, locals())
     for action in end_actions:
         exec(action, locals())
+
+
+if __name__ == "__main__":
+    cli()

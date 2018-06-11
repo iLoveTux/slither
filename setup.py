@@ -20,16 +20,12 @@ setup(
     install_requires=["croniter"],
     entry_points={
         "console_scripts": [
-            "sl-syslog=slither.plugins.syslog_server:main",
+            "sl-syslog=slither.syslog_server:main",
             "slyce=slither.slyce:main",
             "ginsu=slither.ginsu:cli",
             "slither=slither:main",
-        ],
-        "slither.plugin": [
-            "tictok=slither.plugins:tick_tock",
-            "files=slither.plugins:watch_directory",
-            "automan=slither.plugins:automan",
-            # "syslog=slither:syslog_server",
+            "rextract=slither.rextract:rextract",
+            "dsh=slither.dsh:main",
         ],
         "ginsu.plugin": [
             "python=slither.ginsu:python_plugin",

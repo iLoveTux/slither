@@ -1,56 +1,106 @@
 import re
+import csv
 import sys
 import click
 import logging
+import pkg_resources
+import multiprocessing
 from pathlib import Path
 from glob import glob
 from lxml import etree
+from collections import defaultdict
 
 logging.basicConfig(stream=sys.stdout, level=20, format="%(message)s")
 
-def handle_file(path, columns, patterns, content_type):
+def xml(line):
+    line = etree.fromstring(line)
+    out_dict = {}
+    for node in line.xpath("//*"):
+        if node.text:
+            key = ".".join(reversed([n.tag for n in node.iterancestors()])) + "." + node.tag
+            # print(key)
+            yield (key, node.text)
+        for k, v in node.attrib.items():
+            key = ".".join(reversed([n.tag for n in node.iterancestors()]))
+            key = key + "." + node.tag + "@" + k if key else node.tag + "@" + k
+            # print(key)
+            yield (key, v)
+
+def regex(regexp):
+    def inner(line):
+        return regexp.findall(line)
+    return inner
+
+def handle_file(path, pipeline, fieldnames):
     log = logging.getLogger(__name__)
     if path is sys.stdin:
         for line in path:
-            if content_type == "xml":
-                line = etree.fromstring(line)
-                log.info(",".join(";".join(map(str, line.xpath(pattern))) for pattern in patterns))
-            elif content_type == "text":
-                log.info(",".join(";".join(pattern.findall(line)) for pattern in patterns))
+            for step in pipeline["preprocess"]:
+                line = step(line)
+            out_dict = {}
+            for step in pipeline["pipeline"]:
+                out_dict.update(
+                    dict(list(step(line)))
+                )
+            if any(fieldname in out_dict for fieldname in fieldnames):
+                print(",".join(out_dict.get(fieldname) for fieldname in fieldnames))
     else:
         with path.open("r") as fin:
             for line in fin:
-                if content_type == "xml":
-                    line = etree.fromstring(line)
-                    log.info(",".join(";".join(map(str, line.xpath(pattern))) for pattern in patterns))
-                elif content_type == "text":
-                    log.info(",".join(";".join(pattern.findall(line)) for pattern in patterns))
+                for step in pipeline["preprocess"]:
+                    line = step(line)
+                out_dict = defaultdict(list)
+                for step in pipeline["pipeline"]:
+                    for k, v in step(line):
+                        out_dict[k].append(v)
+                if any(fieldname in out_dict for fieldname in fieldnames):
+                    print(",".join(" ".join(out_dict.get(fieldname)) for fieldname in fieldnames))
+
+def _get_plugins(group: str="slyce.plugin"):
+    """Retrieve the items registered with setuptools
+    entry_points for the given group (defaults to
+    slither.plugin group).
+
+    TODO: Whitelist/blacklist for plugins
+    """
+    plugins = {}
+    for ep in pkg_resources.iter_entry_points(group=group):
+        plugins.update({ep.name: ep.load()})
+    return plugins
+
+def _import(module, func):
+    """Perform the equivalent of from $module import $func
+    """
+    module = __import__(
+        module, globals(), locals(), [func], 0
+    )
+    return getattr(module, func)
 
 @click.command()
 @click.argument("src", type=click.Path())
-@click.option("--columns", "-c", multiple=True)
-@click.option("--xml", "content_type", flag_value="xml")
-@click.option("--text", "content_type", flag_value="text", default=True)
-@click.option("--logging-config", "-l", type=click.File(), default=None)
-def main(src, columns, content_type, logging_config):
-    log = logging.getLogger(__name__)
-    if logging_config:
-        logging.dictConfig(json.load(logging_config))
-    _columns, _patterns = [], []
-    for column in columns:
-        _column, _pattern = column.split(":", 1)
-        _columns.append(_column)
-        if content_type == "text":
-            _patterns.append(re.compile(_pattern))
-        else:
-            _patterns.append(_pattern)
-    log.info(",".join(_columns))
+@click.option("--preprocesses", "-p", multiple=True)
+@click.option("--extractions", "-x", multiple=True)
+@click.option("--fieldnames", "-f", multiple=True)
+def main(src, preprocesses, extractions, fieldnames):
+    plugins = _get_plugins()
+    pipeline = {
+        "preprocess": [],
+        "pipeline": [],
+    }
+    for preprocess in preprocesses:
+        func = _import(*preprocess.split(":"))
+        pipeline["preprocess"].append(func)
+    for extraction in extractions:
+        pipeline["pipeline"].append(
+            _import(*extraction.split(":"))
+        )
+    print(",".join(fieldnames))
     if src == "-":
-        handle_file(sys.stdin, _columns, _patterns, content_type)
+        handle_file(sys.stdin, pipeline, fieldnames)
     else:
         for path in glob(src):
             path = Path(path)
             if path.is_file():
-                handle_file(path, _columns, _patterns, content_type)
+                handle_file(path, pipeline, fieldnames)
             elif path.is_dir():
-                handle_dir(path, columns, content_type)
+                raise ValueError("Only filenames and glob patterns are allowed, not directories.")
