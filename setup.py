@@ -21,11 +21,8 @@ setup(
     entry_points={
         "console_scripts": [
             "sl-syslog=slither.syslog_server:main",
-            "slyce=slither.slyce:main",
             "ginsu=slither.ginsu:cli",
             "slither=slither:main",
-            "rextract=slither.rextract:rextract",
-            "dsh=slither.dsh:main",
         ],
         "ginsu.plugin": [
             "python=slither.ginsu:python_plugin",

@@ -194,10 +194,13 @@ def parse_script(script):
         if not test:
             test = "True"
         ret[test.strip()].append(dedent(action))
+    if not ret:
+        print("script '{}' yielded no actionable items".format(script))
+        sys.exit(-1)
     return ret
 
 
-@cli.command("aina")
+@cli.command("slither")
 @click.option("--field-seperator", "-F", default=r"\s+")
 @click.argument("script")
 @click.argument("files", nargs=-1)
@@ -249,7 +252,6 @@ def aina(field_seperator, script, files):
                                 exec(action, locals())
     for action in end_actions:
         exec(action, locals())
-
 
 if __name__ == "__main__":
     cli()
