@@ -17,10 +17,12 @@ import os
 import sys
 import time
 import json
+import shlex
+import atexit
 import fnmatch
 import logging
 import argparse
-import shlex
+import subprocess
 import pkg_resources
 import logging.config
 from lxml import etree
@@ -73,6 +75,14 @@ def _setup_logging(args):
             logging.config.dictConfig(json.load(fp))
     else:
         logging.basicConfig(level=args.log_level, stream=sys.stdout)
+
+def terminate_process(proc):
+    proc.terminate()
+    try:
+        proc.wait(15)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
 THREADPOOL = {
     "daemons": {
         "cron": None,
@@ -92,18 +102,23 @@ def handle_config(path):
         tree = etree.parse(fp)
     for node in tree.xpath(".//Task"):
         log.debug(etree.tostring(node))
+        shell_command = False
         name = node.attrib.pop("_name")
-        module = node.attrib.pop("_module")
         if "_function" in node.attrib:
+            module = node.attrib.pop("_module")
             func = node.attrib.pop("_function")
             func = _import(module, func)
         elif "_method" in node.attrib:
+            module = node.attrib.pop("_module")
             method = node.attrib.pop("_method")
             obj, method = method.split(".")
             obj = _import(module, obj)
             func = getattr(obj, method)
+        elif "_shell_command":
+            shell_command = True
+            func = partial(subprocess.Popen, shlex.split(node.attrib.pop("_shell_command")))
         else:
-            raise ValueError("Either _function or _method must be specified")
+            raise ValueError("Either _function, _method or _shell_command must be specified")
         if "_args" in node.attrib:
             args = shlex.split(node.attrib.pop("_args"))
         else:
@@ -113,12 +128,16 @@ def handle_config(path):
             # daemon
             # Add option to restart if necessary
             log.info("Preparing to run Task {} as daemon.".format(name))
-            if name not in THREADPOOL["daemons"]:
-                t = Thread(target=func, args=args, kwargs=node.attrib)
-                t.daemon=True
-                log.info("Starting daemon task {}".format(name))
-                t.start()
-                THREADPOOL["daemons"][name] = t
+            if shell_command:
+                proc = func()
+                atexit.register(terminate_process, proc)
+            else:
+                if name not in THREADPOOL["daemons"]:
+                    t = Thread(target=func, args=args, kwargs=node.attrib)
+                    t.daemon=True
+                    log.info("Starting daemon task {}".format(name))
+                    t.start()
+                    THREADPOOL["daemons"][name] = t
         elif schedule == "once":
             # run once
             log.info("Preparing to run Task {} once.".format(name))
@@ -151,34 +170,23 @@ def handle_config(path):
             t.start()
             THREADPOOL["daemons"]["cron"] = t
 
-        # while path.stat().st_mtime == mtime:
-        #     log.info("slither.xml file has not changed. Sleeping for 10 seconds.")
-        #     time.sleep(10)
-        # mtime = path.stat().st_mtime
-        # # slither.xml has changed, time for an orderly shutdown
-        # log.debug("Detected change in slither.xml, initiating graceful restart.")
-        # cron_thread = THREADPOOL["daemons"].pop("cron")
-        # try:
-        #     cron_thread.terminate()
-        #     cron_thread.join()
-        # except:
-        #     pass
-        # THREADPOOL["daemons"]["cron"] = None
-        # for name in THREADPOOL["daemons"].keys():
-        #     thread = THREADPOOL["daemons"].pop(name)
-        #     thread.terminate()
-        #     thread.join()
-        # for name in THREADPOOL["once"].keys():
-        #     thread = THREADPOOL["once"].pop(name)
-        #     thread.terminate()
-        #     thread.join()
-        # for name in list(THREADPOOL["cron"].keys()):
-        #     SCHEDULER.cancel(THREADPOOL["cron"][name])
-        #     del THREADPOOL["cron"][name]
 
 def schedule_next_before_run(func, name, _croniter, priority, args, kwargs):
     def inner(*args, **_kwargs):
-        THREADPOOL["cron"][name] = SCHEDULER.enterabs(_croniter.get_next(), priority, schedule_next_before_run(func, name, _croniter, priority, args, kwargs), argument=args, kwargs=kwargs)
+        THREADPOOL["cron"][name] = SCHEDULER.enterabs(
+            _croniter.get_next(),
+            priority,
+            schedule_next_before_run(
+                func,
+                name,
+                _croniter,
+                priority,
+                args,
+                kwargs
+            ),
+            argument=args,
+            kwargs=kwargs
+        )
         return func(*args, **kwargs)
     return inner
 
