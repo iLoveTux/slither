@@ -32,15 +32,12 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 def log_writer(q):
     while True:
-        try:
-            loggername, msg = q.get()
-        except:
-            continue
+        loggername, msg = q.get()
         logging.getLogger(loggername).info(msg.strip().decode())
         q.task_done()
 
-def syslog_server(host, port, poll_interval=0.5, loggername="slither.syslog", max_writers=5, certfile=None, keyfile=None):
-    q = JoinableQueue()
+def syslog_server(host, port, poll_interval=0.5, loggername="slither.syslog", max_writers=5, max_qsize=50000, certfile=None, keyfile=None):
+    q = JoinableQueue(maxsize=max_qsize)
     writers = [Thread(target=log_writer, args=(q,)) for x in range(max_writers)]
     for writer in writers:
         writer.daemon = True
@@ -76,13 +73,18 @@ def syslog_server(host, port, poll_interval=0.5, loggername="slither.syslog", ma
 @click.option("--poll-interval", "-i", default=0.5, type=float)
 @click.option("--loggername", "-n", default="{}.syslog".format(__name__))
 @click.option("--max-writers", "-w", default=5)
+@click.option("--max-qsize", "-w", default=50000)
 @click.option("--cert", "-c", default=None, type=str)
 @click.option("--key", "-k", default=None, type=str)
 @click.option("--logging-config", "-l", default=None, type=str)
-def main(host, port, poll_interval, loggername, max_writers, cert, key, logging_config):
+def main(host, port, poll_interval, loggername, max_writers, max_qsize, cert, key, logging_config):
     if logging_config:
         with open(logging_config, "r") as fin:
             logging.config.dictConfig(json.load(fin))
     else:
         logging.basicConfig(stream=sys.stdout, level=20)
-    syslog_server(host, port, poll_interval, loggername, max_writers, cert, key)
+    syslog_server(host, port, poll_interval, loggername, max_writers, max_qsize, cert, key)
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
