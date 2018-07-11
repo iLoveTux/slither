@@ -3,6 +3,8 @@ import ssl
 import json
 import atexit
 import logging
+import logging.config
+import logging.handlers
 import click
 import socketserver
 from threading import Thread
